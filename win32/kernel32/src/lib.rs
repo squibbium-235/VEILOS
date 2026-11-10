@@ -41,6 +41,7 @@ mod rare;
 mod registry;
 mod resource;
 mod security_compat;
+mod acl_entries;
 mod support;
 mod system;
 mod sync;

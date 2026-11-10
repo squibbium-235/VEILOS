@@ -68,7 +68,6 @@ unsup() {
 # Not kept: ACL editing, restricted tokens, services, LSA (claude.exe's sandbox).
 EXTRA="$(unsup VeilCryptUnsupported AddAce     ConvertSecurityDescriptorToStringSecurityDescriptorW ConvertStringSecurityDescriptorToSecurityDescriptorW     ConvertStringSidToSidW CreateProcessWithLogonW CreateRestrictedToken DuplicateTokenEx GetAce GetAclInformation     GetKernelObjectSecurity ImpersonateAnonymousToken LookupAccountNameW SetKernelObjectSecurity     SetSecurityDescriptorControl SetThreadToken SetTokenInformation QueryServiceConfigW QueryServiceStatus     CloseServiceHandle SaferiIsExecutableFileType OpenSCManagerW OpenServiceW)
 $(unsup VeilNothingToFree GetSecurityDescriptorLength)
-$(unsup VeilErrorNotSupported SetEntriesInAclA)
 $(unsup VeilCngUnsupported LsaAddAccountRights LsaRemoveAccountRights)
     LsaNtStatusToWinError=kernel32.LsaNtStatusToWinError
     LsaOpenPolicy=kernel32.LsaOpenPolicy
@@ -87,7 +86,7 @@ $(unsup VeilCngUnsupported LsaAddAccountRights LsaRemoveAccountRights)
     RegRestoreKeyW RegSetKeySecurity RegNotifyChangeKeyValue RegCloseKey RegCreateKeyA RegCreateKeyExA RegCreateKeyExW RegCreateKeyW     RegDeleteKeyExW RegDeleteValueW RegEnumKeyExW RegEnumValueW RegGetValueW RegOpenKeyExA RegOpenKeyExW     RegOpenKeyW RegQueryInfoKeyW RegQueryValueExA RegQueryValueExW RegSetKeyValueA RegSetKeyValueW     RegSetValueExW EventActivityIdControl EventEnabled EventProviderEnabled EventRegister     EventSetInformation EventUnregister EventWrite EventWriteEx EventWriteTransfer \
     RegisterEventSourceW RegisterEventSourceA \
     DeregisterEventSource ReportEventW ReportEventA \
-    AddAccessAllowedAce AddAccessAllowedAceEx AddAccessDeniedAceEx CreateWellKnownSid IsValidAcl BuildTrusteeWithSidW RegDisablePredefinedCache AccessCheck AllocateLocallyUniqueId
+    AddAccessAllowedAce AddAccessAllowedAceEx AddAccessDeniedAceEx CreateWellKnownSid IsValidAcl BuildTrusteeWithSidW RegDisablePredefinedCache AccessCheck AllocateLocallyUniqueId SetEntriesInAclW SetEntriesInAclA
 fwd urlmon.dll FindMimeFromData
 # What the Rust toolchain loads besides.
 fwd bcryptprimitives.dll ProcessPrng
