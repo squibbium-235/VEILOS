@@ -197,7 +197,13 @@ fn missing_call(id: u64) -> u64 {
         }
         return 0;
     }
-    let name = crate::modules::unresolved_name(id).unwrap_or_else(|| alloc::string::String::from("an unknown function"));
+    let name = crate::modules::unresolved_name(id).unwrap_or_else(|| {
+        alloc::format!(
+            "an unknown function (missing syscall {:#x}, slot {})",
+            id,
+            id - crate::modules::UNRESOLVED_SYSCALL_BASE
+        )
+    });
     let program = proc.linker.lock().as_ref().and_then(|l| l.exe_name()).unwrap_or_else(|| alloc::string::String::from(proc.name));
     crate::serial_println!("[WIN32] pid {} ({}) called {}, which VEILOS doesn't have: ending it", proc.pid, program, name);
     if let Some(console) = &proc.console {

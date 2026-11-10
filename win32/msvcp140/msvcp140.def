@@ -1,0 +1,5 @@
+LIBRARY msvcp140.dll
+EXPORTS
+    "?uncaught_exceptions@std@@YAHXZ"=ucrtbase.__uncaught_exceptions
+    _Query_perf_counter=kernel32.VeilQueryPerfCounter
+    _Query_perf_frequency=kernel32.VeilQueryPerfFrequency

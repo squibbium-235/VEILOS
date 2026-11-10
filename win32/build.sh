@@ -121,14 +121,10 @@ unsup VeilErrorNotSupported CancelMibChangeNotify2 ConvertInterfaceIndexToLuid C
 printf '    GetNetworkParams=kernel32.GetNetworkParams
 ' >> target/forwarders/iphlpapi.dll.def
 fwd_link iphlpapi.dll
-# msvcp140.dll: Microsoft C++ runtime compatibility.
-printf 'LIBRARY msvcp140.dll
-EXPORTS
-    "?uncaught_exceptions@std@@YAHXZ"=ucrtbase.__uncaught_exceptions
-    _Query_perf_counter=kernel32.VeilQueryPerfCounter
-    _Query_perf_frequency=kernel32.VeilQueryPerfFrequency
-' > target/forwarders/msvcp140.dll.def
-fwd_link msvcp140.dll
+# msvcp140.dll is a no_std Rust cdylib in this Cargo workspace.
+# Reserve the same address slot as the old C-based DLL for later forwarders.
+next_base
+cp "$OUT/msvcp140.dll" ../storage/system/msvcp140.dll
 # fwpuclnt.dll (the firewall), netapi32.dll (local users and groups),
 # wtsapi32.dll (sessions): claude.exe imports them for its sandbox; none of
 # that exists here, and each call says so.

@@ -644,6 +644,22 @@ fn load_dll(proc: &Process, name: u64, chars: u64, base_out: u64, inits: u64) ->
             return s;
         }
     };
+    // The initial loader snapshots linker.unresolved into process.unresolved_imports.
+    // A later LoadLibrary may create more unresolved stubs, with syscall IDs
+    // indexed into the growing linker.unresolved vector. Keep the process's
+    // names in sync so those IDs do not show up as "an unknown function".
+    // Only append: old entries retain their "already logged" state.
+    {
+        let mut unresolved = proc.unresolved_imports.lock();
+        let previous = unresolved.len();
+        if linker.unresolved.len() > previous {
+            unresolved.extend(linker.unresolved[previous..].iter().cloned().map(|name| (name, false)));
+            crate::serial_println!(
+                "[MODULES] pid {}: LoadLibrary({}) registered {} more unresolved import(s) (total {})",
+                proc.pid, name, unresolved.len() - previous, unresolved.len()
+            );
+        }
+    }
     let n = calls.len().min(capacity as usize);
     if n > 0 && !ptr_ok(inits, n * core::mem::size_of::<nt_abi::InitCall>()) {
         return status::ACCESS_VIOLATION;

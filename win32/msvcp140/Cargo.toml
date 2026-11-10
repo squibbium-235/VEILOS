@@ -1,0 +1,11 @@
+[package]
+name = "msvcp140"
+version = "0.1.0"
+edition = "2021"
+description = "VEILOS no_std Rust Microsoft C++ runtime compatibility library"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
