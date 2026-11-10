@@ -49,7 +49,7 @@ sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
 tinybmp = { version = "0.7.0", default-features = false }
 zune-jpeg = { version = "0.5.15", default-features = false }
 zune-png = { version = "0.5.2", default-features = false }
-blake3 = { version = "1.5.1", default-features = false }
+blake3 = { version = "1.5.1", default-features = false, features = ["pure"] }
 lz4_flex = { version = "0.11", default-features = false, features = ["safe-decode", "safe-encode"] }
 
 

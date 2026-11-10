@@ -796,3 +796,70 @@ pub extern "system" fn NtQuerySecurityObject(_h: u64, _info: u32, _sd: *mut u8, 
 pub extern "system" fn NtSetSecurityObject(_h: u64, _info: u32, _sd: *const u8) -> NtStatus {
     status::SUCCESS // accepted; nothing enforces security descriptors
 }
+
+#[no_mangle]
+pub unsafe extern "system" fn RtlCompareMemory(
+    source1: *const u8,
+    source2: *const u8,
+    length: usize,
+) -> usize {
+    let mut matched = 0;
+
+    while matched < length {
+        let a = unsafe { source1.add(matched).read_volatile() };
+        let b = unsafe { source2.add(matched).read_volatile() };
+
+        if a != b {
+            break;
+        }
+
+        matched += 1;
+    }
+
+    matched
+}
+
+fn current_teb() -> *mut u8 {
+    let teb: *mut u8;
+
+    unsafe {
+        core::arch::asm!(
+            "mov {}, gs:[0x30]",
+            out(reg) teb,
+            options(nostack, readonly, preserves_flags)
+        );
+    }
+
+    teb
+}
+
+#[no_mangle]
+pub extern "system" fn RtlGetLastWin32Error() -> u32 {
+    unsafe {
+        *(current_teb().add(nt_abi::layout::TEB_LAST_ERROR)
+            as *const u32)
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn RtlSetLastWin32Error(error: u32) {
+    unsafe {
+        *(current_teb().add(nt_abi::layout::TEB_LAST_ERROR)
+            as *mut u32) = error;
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn RtlQueryPerformanceCounter(
+    counter: *mut i64,
+) -> i32 {
+    if counter.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        *counter = core::arch::x86_64::_rdtsc() as i64;
+    }
+
+    1
+}

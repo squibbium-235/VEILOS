@@ -714,3 +714,82 @@ pub extern "system" fn htonl(v: u32) -> u32 {
 pub extern "system" fn ntohl(v: u32) -> u32 {
     u32::from_be(v)
 }
+
+const ERROR_EVENTLOG_NOT_IMPLEMENTED: u32 = 120;
+
+#[no_mangle]
+pub extern "system" fn RegisterEventSourceW(
+    _server: *const u16,
+    _source: *const u16,
+) -> Handle {
+    crate::SetLastError(ERROR_EVENTLOG_NOT_IMPLEMENTED);
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn RegisterEventSourceA(
+    _server: *const u8,
+    _source: *const u8,
+) -> Handle {
+    crate::SetLastError(ERROR_EVENTLOG_NOT_IMPLEMENTED);
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn DeregisterEventSource(
+    _handle: Handle,
+) -> Bool {
+    crate::SetLastError(ERROR_EVENTLOG_NOT_IMPLEMENTED);
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn ReportEventW(
+    _handle: Handle,
+    _kind: u16,
+    _category: u16,
+    _event_id: u32,
+    _sid: *const u8,
+    _strings_count: u16,
+    _data_size: u32,
+    _strings: *const *const u16,
+    _data: *const u8,
+) -> Bool {
+    crate::SetLastError(ERROR_EVENTLOG_NOT_IMPLEMENTED);
+    0
+}
+
+#[no_mangle]
+pub extern "system" fn ReportEventA(
+    _handle: Handle,
+    _kind: u16,
+    _category: u16,
+    _event_id: u32,
+    _sid: *const u8,
+    _strings_count: u16,
+    _data_size: u32,
+    _strings: *const *const u8,
+    _data: *const u8,
+) -> Bool {
+    crate::SetLastError(ERROR_EVENTLOG_NOT_IMPLEMENTED);
+    0
+}
+
+const E_NOTIMPL: i32 = 0x80004001u32 as i32;
+
+#[no_mangle]
+pub extern "system" fn WerRegisterRuntimeExceptionModule(
+    _dll: *const u16,
+    _context: *mut core::ffi::c_void,
+) -> i32 {
+    // VEILOS does not yet provide Windows Error Reporting.
+    E_NOTIMPL
+}
+
+#[no_mangle]
+pub extern "system" fn WerUnregisterRuntimeExceptionModule(
+    _dll: *const u16,
+    _context: *mut core::ffi::c_void,
+) -> i32 {
+    E_NOTIMPL
+}

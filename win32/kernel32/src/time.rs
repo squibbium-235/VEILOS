@@ -47,6 +47,28 @@ pub unsafe extern "system" fn QueryPerformanceFrequency(frequency: *mut i64) -> 
 }
 
 #[no_mangle]
+pub extern "system" fn VeilQueryPerfCounter() -> i64 {
+    let mut value: i64 = 0;
+
+    if unsafe { QueryPerformanceCounter(&mut value) } != 0 {
+        value
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn VeilQueryPerfFrequency() -> i64 {
+    let mut value: i64 = 0;
+
+    if unsafe { QueryPerformanceFrequency(&mut value) } != 0 {
+        value
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "system" fn GetSystemTimeAsFileTime(ft: *mut u64) {
     unsafe { core::ptr::write_unaligned(ft, ksystem_time(kusd::SYSTEM_TIME)) };
 }

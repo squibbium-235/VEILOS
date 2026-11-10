@@ -241,7 +241,7 @@ const PAT_VALUE: u64 = 0x0007_0406_0007_0106;
 /// call it on the BSP before any WC mapping exists and on each AP at bring-up.
 pub fn init_pat() {
     use core::arch::x86_64::__cpuid;
-    if __cpuid(1).edx & (1 << 16) == 0 {
+    if unsafe { __cpuid(1) }.edx & (1 << 16) == 0 {
         crate::serial_println!("[PAT] CPU has no PAT; WRITE_THROUGH mappings stay write-through");
         return;
     }

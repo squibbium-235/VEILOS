@@ -229,8 +229,9 @@ pub fn api_set_host(name: &str) -> Option<&'static str> {
     }
     Some(if n.starts_with("api-ms-win-crt-") {
         "ucrtbase.dll"
+    } else if n.starts_with("api-ms-win-core-rtlsupport-") {
+        "ntdll.dll"
     } else if n.starts_with("ext-ms-win-") {
-        // Optional extensions (branding, shell helpers): not provided yet.
         return None;
     } else {
         "kernel32.dll"

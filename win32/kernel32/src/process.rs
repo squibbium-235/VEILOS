@@ -213,6 +213,83 @@ pub extern "system" fn GetProcessId(process: Handle) -> u32 {
 }
 
 #[no_mangle]
+pub unsafe extern "system" fn QueryFullProcessImageNameW(
+    process: Handle,
+    flags: u32,
+    name: *mut u16,
+    size: *mut u32,
+) -> Bool {
+    const ERROR_INVALID_PARAMETER: u32 = 87;
+    const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const ERROR_NOT_SUPPORTED: u32 = 50;
+
+    if name.is_null() || size.is_null() {
+        crate::SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    // Initially support Win32 paths only.
+    // PROCESS_NAME_NATIVE requires native NT paths.
+    if flags != 0 {
+        crate::SetLastError(ERROR_NOT_SUPPORTED);
+        return 0;
+    }
+
+    // Support the current process, including a real handle
+    // referring to that same process.
+    if process != CURRENT_PROCESS {
+        let pid = GetProcessId(process);
+
+        if pid == 0 {
+            return 0;
+        }
+
+        if pid != crate::GetCurrentProcessId() {
+            crate::SetLastError(ERROR_NOT_SUPPORTED);
+            return 0;
+        }
+    }
+
+    let mut buffer = [0u16; 1024];
+
+    let length = unsafe {
+        crate::module::GetModuleFileNameW(
+            0,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+        )
+    } as usize;
+
+    if length == 0 {
+        return 0;
+    }
+
+    if length >= buffer.len() {
+        crate::SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return 0;
+    }
+
+    let capacity = unsafe { *size } as usize;
+
+    if capacity <= length {
+        crate::SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return 0;
+    }
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            buffer.as_ptr(),
+            name,
+            length + 1,
+        );
+
+        *size = length as u32;
+    }
+
+    1
+}
+
+#[no_mangle]
 pub extern "system" fn TerminateProcess(process: Handle, code: u32) -> Bool {
     check(unsafe { crate::NtTerminateProcess(process, code as NtStatus) })
 }

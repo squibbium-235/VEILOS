@@ -228,3 +228,32 @@ pub extern "system" fn FreeLibrary(_module: Handle) -> Bool {
 pub extern "system" fn DisableThreadLibraryCalls(_module: Handle) -> Bool {
     1
 }
+
+#[no_mangle]
+pub unsafe extern "system" fn SetDllDirectoryW(
+    path: *const u16
+) -> Bool {
+    // VEILOS currently doesn't search the working directory.
+    // Support the empty/default cases within its existing search model.
+    if path.is_null() || unsafe { wstr(path) }.is_empty() {
+        return 1;
+    }
+
+    // Custom DLL directories need kernel loader support.
+    crate::SetLastError(120); // ERROR_CALL_NOT_IMPLEMENTED
+    0
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn SetDllDirectoryA(
+    path: *const u8
+) -> Bool {
+    if path.is_null() {
+        return unsafe {
+            SetDllDirectoryW(core::ptr::null())
+        };
+    }
+
+    let wide = unsafe { widen(path) };
+    unsafe { SetDllDirectoryW(wide.as_ptr()) }
+}

@@ -93,8 +93,8 @@ pub(crate) fn calibrate(mut sample: impl FnMut() -> u64) -> Option<u64> {
 
 fn tsc_is_invariant() -> bool {
     use core::arch::x86_64::__cpuid;
-    __cpuid(0x8000_0000).eax >= 0x8000_0007
-        && __cpuid(0x8000_0007).edx & (1 << 8) != 0
+    unsafe { __cpuid(0x8000_0000) }.eax >= 0x8000_0007
+        && unsafe { __cpuid(0x8000_0007) }.edx & (1 << 8) != 0
 }
 
 /// Calibrate the TSC. Call once on the BSP, early in boot (needs only port I/O).

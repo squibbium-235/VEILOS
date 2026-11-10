@@ -16,3 +16,5 @@ win32/tests/*/build/
 
 # Release builds (tools/package_release.sh)
 /dist/
+
+/storage/Mozilla Firefox
