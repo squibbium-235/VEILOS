@@ -88,6 +88,142 @@ pub unsafe extern "system" fn RtlCreateUnicodeStringFromAsciiz(s: *mut UnicodeSt
     unsafe { make(s, core::slice::from_raw_parts(text, n).iter().map(|&b| b as u16)) as u8 }
 }
 
+// -----| Counted ANSI and Unicode strings |-----
+
+/// VEILOS currently models its ANSI code page as Windows-1252. ASCII
+/// conversion is exact; other Windows code pages need locale-aware NLS
+/// tables in a later pass.
+fn cp1252_to_unicode(byte: u8) -> u16 {
+    const EXTENDED: [u16; 32] = [
+        0x20ac, 0x0081, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021,
+        0x02c6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008d, 0x017d, 0x008f,
+        0x0090, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
+        0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x009d, 0x017e, 0x0178,
+    ];
+    if (0x80..0xa0).contains(&byte) {
+        EXTENDED[(byte - 0x80) as usize]
+    } else {
+        byte as u16
+    }
+}
+
+/// ANSI_STRING is 16 bytes on x64: Length, MaximumLength, char*.
+/// The existing UnicodeString struct has the same wire layout.
+#[no_mangle]
+pub unsafe extern "system" fn RtlAnsiStringToUnicodeString(
+    dest: *mut UnicodeString,
+    source: *const UnicodeString,
+    allocate: u8,
+) -> NtStatus {
+    if dest.is_null() || source.is_null() {
+        return status::INVALID_PARAMETER;
+    }
+
+    let input = unsafe { &*source };
+    let length = input.length as usize;
+    if length > input.maximum_length as usize
+        || (length != 0 && input.buffer.is_null())
+    {
+        return status::INVALID_PARAMETER;
+    }
+
+    // Always NUL-terminate, even if the counted source has no terminator.
+    let Some(total_bytes) = length.checked_add(1).and_then(|n| n.checked_mul(2)) else {
+        return status::INVALID_PARAMETER;
+    };
+    if total_bytes > u16::MAX as usize {
+        return status::INVALID_PARAMETER;
+    }
+
+    let output = if allocate != 0 {
+        let p = unsafe { crate::RtlAllocateHeap(heap(), 0, total_bytes) } as *mut u16;
+        if p.is_null() {
+            return status::NO_MEMORY;
+        }
+        p
+    } else {
+        let output = unsafe { &*dest };
+        if output.buffer.is_null() || (output.maximum_length as usize) < total_bytes {
+            return status::BUFFER_TOO_SMALL;
+        }
+        output.buffer
+    };
+
+    for i in 0..length {
+        let b = unsafe { *(input.buffer as *const u8).add(i) };
+        unsafe { *output.add(i) = cp1252_to_unicode(b) };
+    }
+    unsafe {
+        *output.add(length) = 0;
+        (*dest).length = (length * 2) as u16;
+        if allocate != 0 {
+            (*dest).maximum_length = total_bytes as u16;
+            (*dest).buffer = output;
+        }
+    }
+    status::SUCCESS
+}
+
+/// Flags: 0 = counted duplicate, 1 = NUL-terminated duplicate,
+/// 3 = also allocate a NUL for an empty source. Flag 2 on its own is invalid.
+#[no_mangle]
+pub unsafe extern "system" fn RtlDuplicateUnicodeString(
+    flags: u32,
+    source: *const UnicodeString,
+    dest: *mut UnicodeString,
+) -> NtStatus {
+    if source.is_null() || dest.is_null() || !matches!(flags, 0 | 1 | 3) {
+        return status::INVALID_PARAMETER;
+    }
+
+    let s = unsafe { &*source };
+    let len = s.length as usize;
+    if len > s.maximum_length as usize
+        || (len & 1) != 0
+        || (len != 0 && s.buffer.is_null())
+        || (len == 0 && s.maximum_length != 0 && s.buffer.is_null())
+    {
+        return status::INVALID_PARAMETER;
+    }
+
+    // For an empty string, Windows leaves Buffer = NULL unless flags == 3.
+    if len == 0 && flags != 3 {
+        unsafe {
+            *dest = UnicodeString {
+                length: 0,
+                maximum_length: 0,
+                buffer: core::ptr::null_mut(),
+            };
+        }
+        return status::SUCCESS;
+    }
+
+    let bytes = len + if flags & 1 != 0 { 2 } else { 0 };
+    if bytes > u16::MAX as usize {
+        return status::INVALID_PARAMETER;
+    }
+
+    let buf = unsafe { crate::RtlAllocateHeap(heap(), 0, bytes) } as *mut u8;
+    if buf.is_null() {
+        return status::NO_MEMORY;
+    }
+
+    unsafe {
+        if len != 0 {
+            core::ptr::copy_nonoverlapping(s.buffer as *const u8, buf, len);
+        }
+        if flags & 1 != 0 {
+            core::ptr::write_unaligned(buf.add(len) as *mut u16, 0);
+        }
+        *dest = UnicodeString {
+            length: len as u16,
+            maximum_length: bytes as u16,
+            buffer: buf as *mut u16,
+        };
+    }
+    status::SUCCESS
+}
+
 #[no_mangle]
 pub unsafe extern "system" fn RtlFreeUnicodeString(s: *mut UnicodeString) {
     unsafe {

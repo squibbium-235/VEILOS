@@ -12,6 +12,7 @@ mod exception;
 mod heap;
 mod rtl;
 mod sec;
+mod sync;
 mod thread;
 
 use core::arch::naked_asm;
