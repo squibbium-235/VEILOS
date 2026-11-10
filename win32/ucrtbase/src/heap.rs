@@ -166,3 +166,15 @@ pub extern "C" fn _heapmin() -> i32 {
     0
 }
 
+
+/// MSVC's internal heap helpers share the CRT process heap with calloc/free.
+/// These are exported through the api-ms-win-crt-heap contract too.
+#[no_mangle]
+pub extern "C" fn _calloc_base(count: usize, size: usize) -> *mut u8 {
+    calloc(count, size)
+}
+
+#[no_mangle]
+pub extern "C" fn _free_base(p: *mut u8) {
+    free(p)
+}

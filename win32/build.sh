@@ -66,7 +66,7 @@ unsup() {
 }
 # advapi32.dll: the registry, tokens, ETW and the rest kernel32 implements.
 # Not kept: ACL editing, restricted tokens, services, LSA (claude.exe's sandbox).
-EXTRA="$(unsup VeilCryptUnsupported AddAccessAllowedAce AddAccessAllowedAceEx AddAccessDeniedAceEx AddAce     ConvertSecurityDescriptorToStringSecurityDescriptorW ConvertStringSecurityDescriptorToSecurityDescriptorW     ConvertStringSidToSidW CreateProcessWithLogonW CreateRestrictedToken DuplicateTokenEx GetAce GetAclInformation     GetKernelObjectSecurity ImpersonateAnonymousToken LookupAccountNameW SetKernelObjectSecurity     SetSecurityDescriptorControl SetThreadToken SetTokenInformation QueryServiceConfigW QueryServiceStatus     CloseServiceHandle SaferiIsExecutableFileType OpenSCManagerW OpenServiceW)
+EXTRA="$(unsup VeilCryptUnsupported AddAce     ConvertSecurityDescriptorToStringSecurityDescriptorW ConvertStringSecurityDescriptorToSecurityDescriptorW     ConvertStringSidToSidW CreateProcessWithLogonW CreateRestrictedToken DuplicateTokenEx GetAce GetAclInformation     GetKernelObjectSecurity ImpersonateAnonymousToken LookupAccountNameW SetKernelObjectSecurity     SetSecurityDescriptorControl SetThreadToken SetTokenInformation QueryServiceConfigW QueryServiceStatus     CloseServiceHandle SaferiIsExecutableFileType OpenSCManagerW OpenServiceW)
 $(unsup VeilNothingToFree GetSecurityDescriptorLength)
 $(unsup VeilErrorNotSupported SetEntriesInAclA)
 $(unsup VeilCngUnsupported LsaAddAccountRights LsaRemoveAccountRights)
@@ -86,7 +86,8 @@ $(unsup VeilCngUnsupported LsaAddAccountRights LsaRemoveAccountRights)
     RegDeleteValueA RegEnumKeyExA RegEnumValueA RegQueryInfoKeyA \
     RegRestoreKeyW RegSetKeySecurity RegNotifyChangeKeyValue RegCloseKey RegCreateKeyA RegCreateKeyExA RegCreateKeyExW RegCreateKeyW     RegDeleteKeyExW RegDeleteValueW RegEnumKeyExW RegEnumValueW RegGetValueW RegOpenKeyExA RegOpenKeyExW     RegOpenKeyW RegQueryInfoKeyW RegQueryValueExA RegQueryValueExW RegSetKeyValueA RegSetKeyValueW     RegSetValueExW EventActivityIdControl EventEnabled EventProviderEnabled EventRegister     EventSetInformation EventUnregister EventWrite EventWriteEx EventWriteTransfer \
     RegisterEventSourceW RegisterEventSourceA \
-    DeregisterEventSource ReportEventW ReportEventA
+    DeregisterEventSource ReportEventW ReportEventA \
+    AddAccessAllowedAce AddAccessAllowedAceEx AddAccessDeniedAceEx CreateWellKnownSid IsValidAcl BuildTrusteeWithSidW RegDisablePredefinedCache AccessCheck AllocateLocallyUniqueId
 fwd urlmon.dll FindMimeFromData
 # What the Rust toolchain loads besides.
 fwd bcryptprimitives.dll ProcessPrng
@@ -165,12 +166,13 @@ EXPORTS
 # oleaut32.dll: imported by number.
 thunk_dll oleaut32.dll kernel32.dll.lib SysAllocStringLen:4 SysFreeString:6 SysStringLen:7 VariantInit:8 VariantClear:9 GetErrorInfo:200 SetErrorInfo:201
 EXTRA="$(unsup VeilCngUnsupported CreateStreamOnHGlobal GetHGlobalFromStream)
-" fwd ole32.dll CoCreateGuid CoCreateInstance CoInitializeEx CoUninitialize CoTaskMemFree CoCreateFreeThreadedMarshaler
+" fwd ole32.dll CoCreateGuid CoCreateInstance CoInitializeEx CoInitialize CoUninitialize OleInitialize OleUninitialize CoTaskMemAlloc CoTaskMemFree CoTaskMemRealloc StringFromGUID2 IIDFromString StringFromCLSID CoCreateFreeThreadedMarshaler
+EXTRA= fwd rpcrt4.dll UuidCreate UuidToStringW RpcStringFreeW
 fwd authz.dll AuthzInitializeResourceManager AuthzFreeResourceManager AuthzInitializeContextFromSid AuthzFreeContext AuthzAccessCheck
 fwd version.dll GetFileVersionInfoSizeW GetFileVersionInfoSizeA GetFileVersionInfoW GetFileVersionInfoA VerQueryValueW VerQueryValueA
 fwd propsys.dll PSGetPropertyDescriptionListFromString PropVariantToStringVectorAlloc
 fwd winspool.drv OpenPrinterW OpenPrinterA ClosePrinter GetPrinterDriverW EnumPrintersW GetDefaultPrinterW DocumentPropertiesW
-fwd shlwapi.dll PathAppendW
+EXTRA= fwd shlwapi.dll PathAppendW PathMatchSpecW PathRemoveFileSpecW PathFindFileNameW PathFindExtensionW PathIsFileSpecW PathIsNetworkPathW PathIsUNCW PathIsRelativeW PathStripPathW PathUnquoteSpacesW PathQuoteSpacesW PathIsUNCServerShareW PathStripToRootW PathCanonicalizeW PathCommonPrefixW PathCombineW StrCmpIW StrStrIW PathAddBackslashW PathRemoveExtensionW PathRenameExtensionW PathCchRemoveFileSpec
  EXTRA=
 # wsock32.dll: Winsock 1, by number, which ws2_32 carries under the same numbers.
 thunk_dll wsock32.dll ws2_32.dll.lib accept:1 bind:2 closesocket:3 connect:4 getpeername:5 getsockname:6 getsockopt:7 htonl:8 htons:9 ioctlsocket:10 inet_addr:11 inet_ntoa:12 listen:13 ntohl:14 ntohs:15 recv:16 recvfrom:17 select:18 send:19 sendto:20 setsockopt:21 shutdown:22 socket:23 gethostbyaddr:51 gethostbyname:52 getprotobyname:53 getprotobynumber:54 getservbyname:55 getservbyport:56 gethostname:57 WSAGetLastError:111 WSASetLastError:112 WSAStartup:115 WSACleanup:116 __WSAFDIsSet:151
@@ -188,6 +190,7 @@ fwd_link dbghelp.dll
 { printf 'LIBRARY winmm.dll
 EXPORTS
 '; unsup VeilErrorNotSupported waveInAddBuffer waveInClose waveInOpen waveInPrepareHeader waveInReset waveInStart waveInStop waveInUnprepareHeader waveOutClose waveOutOpen waveOutPrepareHeader waveOutReset waveOutUnprepareHeader waveOutWrite; } > target/forwarders/winmm.dll.def
+printf '    timeGetTime=kernel32.GetTickCount\n' >> target/forwarders/winmm.dll.def
 fwd_link winmm.dll
 echo "installed: $(ls ../storage/system | tr '\n' ' ')"
 

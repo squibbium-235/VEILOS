@@ -629,3 +629,94 @@ pub unsafe extern "system" fn PropVariantToStringVectorAlloc(_pv: *const u8, out
     }
     E_NOTIMPL
 }
+
+/// IIDFromString accepts {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} or the
+/// unbraced 36-character form, and stores GUID fields in little-endian order.
+#[no_mangle]
+pub unsafe extern "system" fn IIDFromString(text: *const u16, out: *mut [u8; 16]) -> HResult {
+    const CO_E_IIDSTRING: HResult = 0x8004_01F3u32 as i32;
+    if out.is_null() { return E_INVALIDARG; }
+    if text.is_null() { unsafe { *out = [0; 16]; } return S_OK; }
+    let wide = unsafe { wstr(text) };
+    let body = if wide.len() == 38 && wide[0] == b'{' as u16 && wide[37] == b'}' as u16 {
+        &wide[1..37]
+    } else if wide.len() == 36 {
+        wide
+    } else {
+        return CO_E_IIDSTRING;
+    };
+    if [8, 13, 18, 23].iter().any(|&i| body[i] != b'-' as u16) { return CO_E_IIDSTRING; }
+    fn nibble(ch: u16) -> Option<u8> {
+        match ch {
+            48..=57 => Some((ch - 48) as u8),
+            65..=70 => Some((ch - 55) as u8),
+            97..=102 => Some((ch - 87) as u8),
+            _ => None,
+        }
+    }
+    let mut bytes = [0u8; 16];
+    let mut n = 0;
+    let mut at = 0;
+    while at < 36 {
+        if body[at] == b'-' as u16 { at += 1; continue; }
+        let (Some(a), Some(b)) = (nibble(body[at]), nibble(body[at+1])) else { return CO_E_IIDSTRING; };
+        bytes[n] = (a << 4) | b;
+        n += 1;
+        at += 2;
+    }
+    // GUID wire layout: Data1, Data2 and Data3 little-endian; Data4 as-is.
+    bytes[..4].reverse();
+    bytes[4..6].reverse();
+    bytes[6..8].reverse();
+    unsafe { *out = bytes; }
+    S_OK
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn StringFromCLSID(guid: *const [u8; 16], out: *mut *mut u16) -> HResult {
+    if guid.is_null() || out.is_null() { return E_INVALIDARG; }
+    let dst = CoTaskMemAlloc(39 * 2) as *mut u16;
+    if dst.is_null() { return E_OUTOFMEMORY; }
+    if unsafe { StringFromGUID2(guid, dst, 39) } != 39 {
+        CoTaskMemFree(dst as *mut u8);
+        return E_FAIL;
+    }
+    unsafe { *out = dst; }
+    S_OK
+}
+
+/// RPC UUID helpers can use the process's existing GUID generator. These
+/// provide functional formatting/allocation, not cryptographic randomness.
+#[no_mangle]
+pub unsafe extern "system" fn UuidCreate(out: *mut [u8; 16]) -> u32 {
+    if out.is_null() { return 87; } // RPC_S_INVALID_ARG
+    if unsafe { CoCreateGuid(out) } == S_OK { 0 } else { 14 }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn UuidToStringW(guid: *const [u8; 16], out: *mut *mut u16) -> u32 {
+    if guid.is_null() || out.is_null() { return 87; }
+    let dst = CoTaskMemAlloc(37 * 2) as *mut u16;
+    if dst.is_null() { return 14; }
+    let mut text = [0u16; 39];
+    if unsafe { StringFromGUID2(guid, text.as_mut_ptr(), 39) } != 39 {
+        CoTaskMemFree(dst as *mut u8);
+        return 87;
+    }
+    unsafe {
+        core::ptr::copy_nonoverlapping(text.as_ptr().add(1), dst, 36);
+        *dst.add(36) = 0;
+        *out = dst;
+    }
+    0
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn RpcStringFreeW(out: *mut *mut u16) -> u32 {
+    if out.is_null() { return 87; }
+    unsafe {
+        CoTaskMemFree(*out as *mut u8);
+        *out = core::ptr::null_mut();
+    }
+    0
+}

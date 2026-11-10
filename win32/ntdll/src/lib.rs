@@ -8,8 +8,10 @@
 
 #![no_std]
 
+mod crt_compat;
 mod exception;
 mod heap;
+mod loader_compat;
 mod rtl;
 mod sec;
 mod sync;
