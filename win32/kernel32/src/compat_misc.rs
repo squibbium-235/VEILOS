@@ -77,6 +77,15 @@ pub unsafe extern "system" fn QueryFullProcessImageNameA(process: Handle, flags:
 
 /// VEILOS processes are unpackaged desktop applications. These return the
 /// documented error code instead of claiming an invented package identity.
+/// Win32 PACKAGE_ID query: ordinary VEILOS processes are unpackaged.
+/// Unlike a success stub, APPMODEL_ERROR_NO_PACKAGE lets callers use their
+/// existing unpackaged-desktop fallback path.
+#[no_mangle]
+pub unsafe extern "system" fn GetCurrentPackageId(length: *mut u32, _buffer: *mut u8) -> u32 {
+    if length.is_null() { return ERROR_INVALID_PARAMETER; }
+    APPMODEL_ERROR_NO_PACKAGE
+}
+
 #[no_mangle]
 pub unsafe extern "system" fn GetCurrentPackageFullName(length: *mut u32, _name: *mut u16) -> u32 {
     if length.is_null() { return ERROR_INVALID_PARAMETER; }

@@ -162,8 +162,21 @@ EXPORTS
 # oleaut32.dll: imported by number.
 thunk_dll oleaut32.dll kernel32.dll.lib SysAllocStringLen:4 SysFreeString:6 SysStringLen:7 VariantInit:8 VariantClear:9 GetErrorInfo:200 SetErrorInfo:201
 EXTRA="$(unsup VeilCngUnsupported CreateStreamOnHGlobal GetHGlobalFromStream)
-" fwd ole32.dll CoCreateGuid CoCreateInstance CoInitializeEx CoInitialize CoUninitialize OleInitialize OleUninitialize CoTaskMemAlloc CoTaskMemFree CoTaskMemRealloc StringFromGUID2 IIDFromString StringFromCLSID CoCreateFreeThreadedMarshaler
+" fwd ole32.dll CoCreateGuid CoCreateInstance CoInitializeEx CoInitialize CoUninitialize OleInitialize OleUninitialize CoTaskMemAlloc CoTaskMemFree CoTaskMemRealloc StringFromGUID2 IIDFromString StringFromCLSID CoCreateFreeThreadedMarshaler CoGetApartmentType
 EXTRA= fwd rpcrt4.dll UuidCreate UuidToStringW RpcStringFreeW
+# combase.dll: modern COM/WinRT entry points. The implementations already
+# live in kernel32's com.rs; programs importing COMBASE by name need a real
+# on-disk DLL to forward to those functions.
+EXTRA= fwd combase.dll \
+    CoTaskMemAlloc CoTaskMemFree CoTaskMemRealloc \
+    CoInitialize CoInitializeEx CoUninitialize CoGetApartmentType \
+    CoCreateInstance CoGetClassObject CoCreateGuid CoWaitForMultipleHandles \
+    CoCreateFreeThreadedMarshaler \
+    RoInitialize RoUninitialize RoGetActivationFactory RoActivateInstance \
+    WindowsCreateString WindowsCreateStringReference WindowsDeleteString \
+    WindowsGetStringRawBuffer WindowsGetStringLen \
+    SetRestrictedErrorInfo GetRestrictedErrorInfo \
+    RoGetMatchingRestrictedErrorInfo RoOriginateError RoOriginateErrorW
 fwd authz.dll AuthzInitializeResourceManager AuthzFreeResourceManager AuthzInitializeContextFromSid AuthzFreeContext AuthzAccessCheck
 fwd version.dll GetFileVersionInfoSizeW GetFileVersionInfoSizeA GetFileVersionInfoW GetFileVersionInfoA VerQueryValueW VerQueryValueA
 fwd propsys.dll PSGetPropertyDescriptionListFromString PropVariantToStringVectorAlloc

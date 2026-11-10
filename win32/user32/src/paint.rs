@@ -983,24 +983,103 @@ pub extern "system" fn GetDpiForSystem() -> u32 {
     96
 }
 
+// The compositor currently renders at 96 DPI.  DPI_AWARENESS_CONTEXT is
+// a pseudo-handle; preserve Windows' per-process/per-thread selections even
+// though scaling is not implemented yet.
+const DPI_UNAWARE: i64 = -1;
+const DPI_SYSTEM_AWARE: i64 = -2;
+static PROCESS_DPI_CONTEXT: core::sync::atomic::AtomicI64 =
+    core::sync::atomic::AtomicI64::new(DPI_SYSTEM_AWARE);
+static THREAD_DPI_SLOT: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(u32::MAX);
+const DPI_SLOT_ALLOCATING: u32 = u32::MAX - 1;
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn TlsAlloc() -> u32;
+    fn TlsGetValue(index: u32) -> usize;
+    fn TlsSetValue(index: u32, value: usize) -> Bool;
+}
+
+fn valid_dpi_context(context: i64) -> bool {
+    matches!(context, -5 | -4 | -3 | DPI_SYSTEM_AWARE | DPI_UNAWARE)
+}
+
+fn dpi_thread_slot() -> Option<u32> {
+    use core::sync::atomic::Ordering;
+    loop {
+        let value = THREAD_DPI_SLOT.load(Ordering::Acquire);
+        if value < DPI_SLOT_ALLOCATING { return Some(value); }
+        if value == DPI_SLOT_ALLOCATING { core::hint::spin_loop(); continue; }
+        if THREAD_DPI_SLOT.compare_exchange(u32::MAX, DPI_SLOT_ALLOCATING, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            let index = unsafe { TlsAlloc() };
+            THREAD_DPI_SLOT.store(index, Ordering::Release);
+            return if index == u32::MAX { None } else { Some(index) };
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn SetProcessDPIAware() -> Bool {
+    PROCESS_DPI_CONTEXT.store(DPI_SYSTEM_AWARE, core::sync::atomic::Ordering::Release);
     1
 }
 
 #[no_mangle]
 pub extern "system" fn IsProcessDPIAware() -> Bool {
+    (PROCESS_DPI_CONTEXT.load(core::sync::atomic::Ordering::Acquire) != DPI_UNAWARE) as Bool
+}
+
+#[no_mangle]
+pub extern "system" fn SetProcessDpiAwarenessContext(context: i64) -> Bool {
+    if !valid_dpi_context(context) { crate::set_error(87); return 0; }
+    PROCESS_DPI_CONTEXT.store(context, core::sync::atomic::Ordering::Release);
     1
 }
 
 #[no_mangle]
-pub extern "system" fn SetProcessDpiAwarenessContext(_ctx: i64) -> Bool {
-    1
+pub extern "system" fn GetThreadDpiAwarenessContext() -> i64 {
+    if let Some(index) = dpi_thread_slot() {
+        let value = unsafe { TlsGetValue(index) } as i64;
+        if valid_dpi_context(value) { return value; }
+    }
+    PROCESS_DPI_CONTEXT.load(core::sync::atomic::Ordering::Acquire)
 }
 
 #[no_mangle]
-pub extern "system" fn SetThreadDpiAwarenessContext(_ctx: i64) -> i64 {
-    -1
+pub extern "system" fn SetThreadDpiAwarenessContext(context: i64) -> i64 {
+    if !valid_dpi_context(context) { crate::set_error(87); return 0; }
+    let previous = GetThreadDpiAwarenessContext();
+    let Some(index) = dpi_thread_slot() else { crate::set_error(8); return 0; };
+    if unsafe { TlsSetValue(index, context as usize) } == 0 { return 0; }
+    previous
+}
+
+/// Windows' pseudo-handle DPI contexts have no extra informational flags.
+/// In this implementation a context is one of those five canonical values.
+#[no_mangle]
+pub extern "system" fn AreDpiAwarenessContextsEqual(a: i64, b: i64) -> Bool {
+    (valid_dpi_context(a) && valid_dpi_context(b) && a == b) as Bool
+}
+
+#[no_mangle]
+pub extern "system" fn GetAwarenessFromDpiAwarenessContext(context: i64) -> i32 {
+    match context {
+        DPI_UNAWARE => 0,
+        DPI_SYSTEM_AWARE => 1,
+        -3 | -4 | -5 => 2,
+        _ => -1, // DPI_AWARENESS_INVALID
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn IsValidDpiAwarenessContext(context: i64) -> Bool {
+    valid_dpi_context(context) as Bool
+}
+
+#[no_mangle]
+pub extern "system" fn GetWindowDpiAwarenessContext(_hwnd: Hwnd) -> i64 {
+    PROCESS_DPI_CONTEXT.load(core::sync::atomic::Ordering::Acquire)
 }
 
 // -----| the pointer, message boxes (dialogs: G3) |-----

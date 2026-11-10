@@ -749,8 +749,34 @@ pub extern "C" fn _amsg_exit(n: i32) -> ! {
     fatal("runtime error", 255)
 }
 
+// MSVC's pure-virtual-call handler lives in the C runtime, shared with
+// vcruntime140.dll through crt_forwarders.py. On x64 the handler is a single
+// function pointer; saving it as usize avoids importing a second CRT.
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+static PURECALL_HANDLER: AtomicUsize = AtomicUsize::new(0);
+
+/// Register the application's pure-virtual-call callback, returning the old
+/// callback (or null). MSVC declares _purecall_handler as void (__cdecl*)().
+#[no_mangle]
+pub extern "C" fn _set_purecall_handler(handler: usize) -> usize {
+    PURECALL_HANDLER.swap(handler, Ordering::AcqRel)
+}
+
+#[no_mangle]
+pub extern "C" fn _get_purecall_handler() -> usize {
+    PURECALL_HANDLER.load(Ordering::Acquire)
+}
+
 #[no_mangle]
 pub extern "C" fn _purecall() -> i32 {
+    let handler = _get_purecall_handler();
+    if handler != 0 {
+        // The callback is an application-supplied MSVC __cdecl void(void).
+        let callback: unsafe extern "C" fn() = unsafe { core::mem::transmute(handler) };
+        unsafe { callback() };
+    }
+    // Microsoft terminates even if the registered handler returns.
     fatal("pure virtual function call", 3)
 }
 

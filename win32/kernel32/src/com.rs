@@ -8,7 +8,7 @@
 //! programs take their fallbacks (a file dialog through GetOpenFileName,
 //! say). WinRT likewise has strings but no activatable classes.
 
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use crate::util::{alloc, free, wstr};
 use crate::{Bool, Handle};
@@ -24,26 +24,87 @@ const REGDB_E_CLASSNOTREG: HResult = 0x8004_0154u32 as i32;
 
 // -----| COM |-----
 
-#[no_mangle]
-pub extern "system" fn CoInitializeEx(_reserved: usize, _model: u32) -> HResult {
-    S_OK
+// COM apartment mode and nesting depth are per-thread.  Store them in a
+// kernel32 TLS slot so even callbacks crossing DLLs observe the same state.
+// Low two bits: 1=STA, 2=MTA; remaining bits: CoInitialize count.
+static COM_TLS_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+const COM_TLS_ALLOCATING: u32 = u32::MAX - 1;
+const RPC_E_CHANGED_MODE: HResult = 0x8001_0106u32 as i32;
+const CO_E_NOTINITIALIZED: HResult = 0x8004_01F0u32 as i32;
+
+fn com_slot() -> Option<u32> {
+    loop {
+        let index = COM_TLS_SLOT.load(Ordering::Acquire);
+        if index < COM_TLS_ALLOCATING { return Some(index); }
+        if index == COM_TLS_ALLOCATING { core::hint::spin_loop(); continue; }
+        if COM_TLS_SLOT.compare_exchange(u32::MAX, COM_TLS_ALLOCATING, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            let allocated = crate::sync::TlsAlloc();
+            COM_TLS_SLOT.store(allocated, Ordering::Release);
+            return if allocated == u32::MAX { None } else { Some(allocated) };
+        }
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn CoInitialize(_reserved: usize) -> HResult {
-    S_OK
+pub extern "system" fn CoInitializeEx(reserved: usize, model: u32) -> HResult {
+    // COINIT_APARTMENTTHREADED=2; 4 and 8 are optional flags, not modes.
+    if reserved != 0 || model & !0xE != 0 { return E_INVALIDARG; }
+    let mode = if model & 2 != 0 { 1usize } else { 2usize };
+    let Some(index) = com_slot() else { return E_OUTOFMEMORY; };
+    let value = crate::sync::TlsGetValue(index);
+    if value == 0 {
+        if crate::sync::TlsSetValue(index, 4 | mode) != 0 { S_OK } else { E_OUTOFMEMORY }
+    } else if value & 3 != mode {
+        RPC_E_CHANGED_MODE
+    } else if value >> 2 == usize::MAX >> 2 {
+        E_FAIL
+    } else if crate::sync::TlsSetValue(index, value + 4) != 0 {
+        S_FALSE
+    } else {
+        E_OUTOFMEMORY
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn OleInitialize(_reserved: usize) -> HResult {
-    S_OK
+pub extern "system" fn CoInitialize(reserved: usize) -> HResult {
+    CoInitializeEx(reserved, 2)
 }
 
 #[no_mangle]
-pub extern "system" fn CoUninitialize() {}
+pub extern "system" fn OleInitialize(reserved: usize) -> HResult {
+    CoInitializeEx(reserved, 2)
+}
 
 #[no_mangle]
-pub extern "system" fn OleUninitialize() {}
+pub extern "system" fn CoUninitialize() {
+    // Do not allocate a TLS slot merely because an uninitialised thread
+    // called CoUninitialize.
+    let index = COM_TLS_SLOT.load(Ordering::Acquire);
+    if index >= COM_TLS_ALLOCATING { return; }
+    let value = crate::sync::TlsGetValue(index);
+    if value >= 5 { let _ = crate::sync::TlsSetValue(index, if value < 9 { 0 } else { value - 4 }); }
+}
+
+#[no_mangle]
+pub extern "system" fn OleUninitialize() {
+    CoUninitialize();
+}
+
+/// OLE32: report the caller's actual COM apartment when it has one.
+/// APTTYPE_STA=0; APTTYPE_MTA=1; APTTYPEQUALIFIER_NONE=0.
+#[no_mangle]
+pub unsafe extern "system" fn CoGetApartmentType(apartment: *mut i32, qualifier: *mut i32) -> HResult {
+    if apartment.is_null() || qualifier.is_null() { return E_INVALIDARG; }
+    let index = COM_TLS_SLOT.load(Ordering::Acquire);
+    if index >= COM_TLS_ALLOCATING { return CO_E_NOTINITIALIZED; }
+    let value = crate::sync::TlsGetValue(index);
+    if value == 0 { return CO_E_NOTINITIALIZED; }
+    unsafe {
+        *apartment = if value & 3 == 1 { 0 } else { 1 };
+        *qualifier = 0;
+    }
+    S_OK
+}
 
 #[no_mangle]
 pub unsafe extern "system" fn CoCreateInstance(_clsid: *const u8, _outer: usize, _ctx: u32, _iid: *const u8, out: *mut usize) -> HResult {
@@ -237,12 +298,16 @@ pub extern "system" fn WindowsGetStringLen(h: usize) -> u32 {
 }
 
 #[no_mangle]
-pub extern "system" fn RoInitialize(_kind: u32) -> HResult {
-    S_OK
+pub extern "system" fn RoInitialize(kind: u32) -> HResult {
+    match kind {
+        0 => CoInitializeEx(0, 2), // RO_INIT_SINGLETHREADED (STA)
+        1 => CoInitializeEx(0, 0), // RO_INIT_MULTITHREADED (MTA)
+        _ => E_INVALIDARG,
+    }
 }
 
 #[no_mangle]
-pub extern "system" fn RoUninitialize() {}
+pub extern "system" fn RoUninitialize() { CoUninitialize() }
 
 /// No activatable classes.
 #[no_mangle]
